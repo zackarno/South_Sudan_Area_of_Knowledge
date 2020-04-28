@@ -34,6 +34,20 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+*.DS_STORE
 
 # R Environment Variables
 .Renviron
+
+/inputs/*
+!/inputs/.gitkeep
+/outputs/*
+!/outputs/.gitkeep
+/product_related/*
+/cleaning_log/*
+/scripts/functions/keys.R
+/scripts/archived/*
+/scripts/experimental/*
+/scrap/*
+/qgis/*
+.Rproj.user
