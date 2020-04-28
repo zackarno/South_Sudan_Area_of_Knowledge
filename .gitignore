@@ -40,9 +40,7 @@ vignettes/*.pdf
 .Renviron
 
 /inputs/*
-
 /outputs/*
-
 /product_related/*
 /cleaning_log/*
 /scripts/functions/keys.R
