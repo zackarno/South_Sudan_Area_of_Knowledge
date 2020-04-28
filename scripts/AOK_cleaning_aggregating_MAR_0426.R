@@ -699,7 +699,7 @@ analyzed_by_grid_filt<-analyzed_by_grid %>%
   mutate_at(.vars = vars_to_avg,
             .funs = function(x){ifelse(analyzed_by_grid$State_id %in% valid_grids,x,NA)})
 
-if(output_aggregated_datasets=="yes")
+if(output_aggregated_datasets=="yes"){
   write.csv(analyzed_by_grid_filt,hex_aggregated_monthly_data_output_file)
 }
 

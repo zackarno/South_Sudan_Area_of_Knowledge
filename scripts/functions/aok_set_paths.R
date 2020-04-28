@@ -2,7 +2,7 @@
 
 #INPUTS
 # GIS
-gdb<- "inputs/gis_data/boundaries"
+gdb<- "inputs/gis_data"
 
 
 
