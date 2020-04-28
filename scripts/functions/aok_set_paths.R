@@ -90,6 +90,10 @@ settlement_aggregated_monthly_data_output_file<- paste0("outputs/",
                                   monthly_folder,"/aggregated_data/",iso_date,
                                   "_reach_ssd_settlement_aggregated_AoK_",
                                   month_label,"2020_Data.csv")
+hex_aggregated_monthly_data_output_file<- paste0("outputs/",
+                                  monthly_folder,"/aggregated_data/",iso_date,
+                                  "_reach_ssd_HEX_aggregated_AoK_",
+                                  month_label,"2020_Data.csv")
 
 
 settlement_aggregated_LT_data_output_file<- paste0("outputs/",
