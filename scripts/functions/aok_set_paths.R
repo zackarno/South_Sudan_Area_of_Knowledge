@@ -76,6 +76,13 @@ itemset_output_file_name<- paste0("outputs/",
                                   "_ITEMSET_UPDATED_from_",
                                   month_label,
                                   "_Data_for_next_round.csv")
+cleaning_log_output_file<- paste0("outputs/",
+                                  monthly_folder,
+                                  "/cleaning_logs/",
+                                  monthly_folder,
+                                  "_cleaning_log_full_",
+                                  month_label,
+                                  "2020.csv")
 
 new_master_settlement_output_path<-paste0("outputs/",
        monthly_folder,

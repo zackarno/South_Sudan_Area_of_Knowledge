@@ -499,7 +499,8 @@ master_settlement_adj %>% nrow()+ nrow(new_setts_add_to_master)
 
 
 if(output_new_settlement_data=="yes"){
-  write.csv(master_new,new_master_settlement_output_path)}
+  write.csv(master_new,new_master_settlement_output_path)
+  }
 
 
 
@@ -525,12 +526,12 @@ cleaning_log_settlements_dropped<-aok_clean3 %>%
          spotted="Zack",
          Sectors="Area_of_Knowledge",
          indicator= "D.info_settlement_other",
-         current_values= D.info_settlement_other,
+         current_value= D.info_settlement_other,
          new_value=NA,
          issue = "No GPS for new settlement provided in New Settlement list"
          ) %>%
   select(uuid=X_uuid, change_type:issue)
-cleaning_log_list[["record_dropped_because_missed_in_CL_and_new_settlement_list"]]<-cleaning_log_settlements_dropped
+cleaning_log_list[["record_dropped_because_missed_in_CL_and_new_settlement_list"]]<-cleaning_log_settlements_dropped %>% mutate(source="auto-generated")
 
 # THERE SHOULD BE NO MORE D.INFO_SETTLEMENT_OTHER
 if(aok_clean4 %>% filter(!is.na(D.info_settlement_other)) %>%
@@ -557,6 +558,28 @@ master_new<-master_new %>%
 aok_clean4 %>%   filter(!name_county_low%in%master_new$name_county_low) %>% as_tibble() %>%
   select(D.info_county,D.info_settlement,D.info_settlement_other, name_county_low)
 
+colnames(cleaning_log_list$field_cl)[2]<-"spotted"
+colnames(cleaning_log_list$main)[2]<-"spotted"
+cleaning_log_list<-purrr:::map(cleaning_log_list,rename_all, .funs = tolower)
+cleaning_log_final<-bind_rows(cleaning_log_list )
+cleaning_log_final %>% colnames()
+cleaning_log_final<-cleaning_log_final %>% left_join(aok_raw %>% select(X_uuid,A.base), by=c("uuid"="X_uuid")) %>%
+  select(uuid:issue,a.base,source)
+# output_cleaning_logs<-"yes"
+if(output_cleaning_logs=="yes"){
+  write.csv(cleaning_log_final,cleaning_log_output_file,na = "")
+}
+
+if(output_data_issues=="yes"){
+  for(i in 1:length(data_issues)){
+    name_di_temp<-names(data_issues)[i]
+    di_temp<-data_issues[[i]]
+    write.csv(di_temp,paste0(data_issues_output_prefix,name_di_temp,"_",month_label,"Data.csv"))
+  }
+}
+data_issues$field_CL_issues
+data_issues$new_settlement_sheet_entries_no_COORDS
+data_issues$AoK_other_settlements_no_coordinates_in_new_settlement
 
 # AGGREGATE SETTLEMENTS USING WRAPPED SCRIPT ------------------------------
 

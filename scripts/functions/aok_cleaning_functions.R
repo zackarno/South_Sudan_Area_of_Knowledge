@@ -83,7 +83,7 @@ evaluate_unmatched_settlements<-function(user,new_settlement_table, uuid_col){
       new_value="",
       issue="",
       suggested_indicator= "D.info_settlement",
-      suggested_issue="User chose other when name correct name was available",
+      suggested_issue="User chose other when correct name was available",
       suggested_new_value=mast.settlement) %>%
     select(uuid:suggested_new_value) #need to add uuid into selection on real data
   cleaning_log2<-new_settlement_table %>%
@@ -97,7 +97,7 @@ evaluate_unmatched_settlements<-function(user,new_settlement_table, uuid_col){
       new_value="",
       issue="",
       suggested_indicator= "D.info_settlement_other",
-      suggested_issue="User chose other when name correct name was available",
+      suggested_issue="User chose other when correct name was available",
       suggested_new_value=NA) %>%
     select(uuid:suggested_new_value)
 
@@ -114,7 +114,7 @@ evaluate_unmatched_settlements<-function(user,new_settlement_table, uuid_col){
       new_value="",
       issue="",
       suggested_indicator= "D.info_county",
-      suggested_issue="User chose other when name correct name was available and chose wrong county for new point",
+      suggested_issue="User chose other when correct name was available and chose wrong county for new point",
       suggested_new_value=new.county_adm2) %>%
     select(uuid:suggested_new_value) #need to add uuid into selection on real data
   cleaning_log4<-
