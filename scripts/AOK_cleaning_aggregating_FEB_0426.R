@@ -6,7 +6,7 @@ library(lubridate)
 library(sf)
 
 iso_date<- Sys.Date() %>%  str_replace_all("-","_")
-month_input_data<-"2020-03-01"
+month_input_data<-"2020-02-01"
 
 source("scripts/functions/aok_aggregation_functions.R")
 source("scripts/functions/aok_cleaning_functions.R")
@@ -21,6 +21,7 @@ output_data_issues<-c("yes","no")[2]
 output_cleaning_logs<-c("yes","no")[2]
 output_new_settlement_data<-c("yes","no")[2]
 output_aggregated_datasets<-c("yes","no")[1]
+cleaning_log_format<-c("multiple_csvs","multiple_xlsx")[1]
 #theses will get filled and written if selected
 cleaning_log_list<-list()
 data_issues<-list()
@@ -38,7 +39,7 @@ colnames(master_settlement)<-paste0("mast.",colnames(master_settlement))
 master_settlement_sf<- st_as_sf(master_settlement,coords=c("mast.X","mast.Y"), crs=4326)
 
 itemset_previous<-read.csv(itemset_previous_month_input_file,strip.white = T, stringsAsFactors = T,na.strings = c(" ",""))
-cleaning_log_format<-c("multiple_csvs","multiple_xlsx")[2]
+
 
 
 # LOAD RAW DATA -----------------------------------------------------------
@@ -108,6 +109,10 @@ num_uuid_in_cl<-cleaning_log %>% select(contains("uid")) %>% colnames() %>% leng
 if(num_uuid_in_cl>1){
   print(cleaning_log %>% select(contains("uid")) %>% colnames() )
 }else(print("GOOD- only one uuid column found"))
+
+if(month_input_data=="2020-02-01"){
+  cleaning_log<- cleaning_log %>%
+  mutate(uuid=ifelse(!is.na(uuid),uuid,ï..uuid)) %>% select(-ï..uuid)}
 #IF THERE IS MORE THAN ONE YOU HAVE TO ADJUST
 
 #ADD BASE TO CLEANING LOG
@@ -132,9 +137,11 @@ aok_cleaning_checks1<-butteR::check_cleaning_log(df = aok_raw, df_uuid = "X_uuid
 
 data_issues[["field_CL_issues"]]<-aok_cleaning_checks1
 
+aok_cleaning_checks1 %>% class()
 #WE WILL HAVE TO DELETE THESE BECAUSE THERE WAS NO REVISION FROM THE FIELD (ITS OK)
+if(is.character(aok_cleaning_checks1)==F){
 cleaning_log_actionable<- cleaning_log_actionable %>%
-  filter(!uuid%in%aok_cleaning_checks1$uuid)
+  filter(!uuid%in%aok_cleaning_checks1$uuid)}
 
 cleaning_log_list[["field_cl"]]<-cleaning_log_actionable %>% mutate(source="field")
 
@@ -173,16 +180,30 @@ if(aok_clean %>%
 
 #READ IN NEW SETTLEMENTS FROM THE FIELDS
 new_settlements<- butteR::read_all_csvs_in_folder(new_settlement_folder)
+ new_settlements$new_settlements_test.csv %>% col
 new_sett<- bind_rows(new_settlements)
+# new_sett %>% View()
 
 # AOS INSTRUCTED TO TAKE THE NEW SETTLEMENT LIST DIRECTLY FROM THE DATA, BUT IN CASE THIS INSTRUCTION IS NOT FOLLOWED
 # THIS JUST CORRECTS ANY OF THE NEW SETTLEMENTS TO THE DATA BY THE UUID (TOOK HOURS TO REALIZE THIS FUNCTION COULD AVOID HEADACHE LATER ON)
+
+if(month_input_data=="2020-02-01"){
+  new_sett<- new_sett %>%
+    filter(action=="Map") %>%
+    rename(uuid="ï..uuid",
+           latitude="lat",
+           longitude="long")
+
+  }
+
+
 new_sett<-rectify_new_settlements_with_data( new_settlements = new_sett,aok =  aok_clean)
 
+if(month_input_data!="2020-02-01"){
 new_sett<-new_sett %>%
   mutate(
     D.info_settlement_other=ifelse(is.na(D.info_settlement_other),New.settlements,D.info_settlement_other)
-  )
+  )}
 
 
 # IF THE CLEANING LOGS DO CONTAIN ENTRIES WHERE THY HAVE CHANGED SETTLEMENTS IN DATA, BUT NOT IN NEW SETTLEMENTS, THIS WILL
@@ -196,7 +217,7 @@ sett_aok_id_key<- aok_raw %>%
   inner_join(sett_aok_id_key, by= c("X_uuid"="uuid")) %>%
   select(old_value=D.info_settlement_other, new_value)
 
-new_sett_with_key<-new_sett %>%
+new_sett_with_key<- new_sett %>%
   left_join(sett_aok_id_key,
             by= c("D.info_settlement_other"="old_value"))
 
@@ -565,7 +586,7 @@ cleaning_log_final<-bind_rows(cleaning_log_list )
 cleaning_log_final %>% colnames()
 cleaning_log_final<-cleaning_log_final %>% left_join(aok_raw %>% select(X_uuid,A.base), by=c("uuid"="X_uuid")) %>%
   select(uuid:issue,a.base,source)
-# output_cleaning_logs<-"yes"
+output_cleaning_logs<-"yes"
 if(output_cleaning_logs=="yes"){
   write.csv(cleaning_log_final,cleaning_log_output_file,na = "")
 }
@@ -661,7 +682,7 @@ colnames(previous_long_term)<- colnames(previous_long_term) %>%
   str_replace_all(c("L.current_activities.Crops_for_sustenance"="L.current_activities.crops_for_sustenance",
                     "L.current_activities.Livestock"= "L.current_activities.livestock"))
 aok_aggregated_with_payams$month<- aok_aggregated_with_payams$month %>% as.character()
-aok_aggregated_with_payams_df<-aok_aggregated_with_payams %>% st_drop_geometry() %>% select(-X)
+aok_aggregated_with_payams_df<-aok_aggregated_with_payams %>% st_drop_geometry()
 long_term_aggregated_new<-bind_rows(previous_long_term, aok_aggregated_with_payams_df)
 
 
@@ -711,9 +732,10 @@ valid_grids<-grid_evaluation_table %>%
 data_hex_pt$F.f2.idp_perc %>% unique()
 data_hex_pt$G.food_wild_proportion %>% table(useNA = "ifany")
 
-kc %>% filter(list_name=="AoO_IDP") %>% select(name)
-ks %>% filter(name=="idp_location") %>% select(type)
+kc %>% filter(list_name=="hc_leave_time") %>% select(name)
+ks %>% filter(name=="idp_time_arrive") %>% select(type)
 
+less_one_meal_var<- ifelse(month_input_data=="2020-02-01", "Less_than_1", "less_than_1")
 data_hex_pt_w_composite<-data_hex_pt %>%
   mutate(
     idp_sites= ifelse(J.j2.idp_location=="informal_sites",1,0),
@@ -721,7 +743,7 @@ data_hex_pt_w_composite<-data_hex_pt %>%
     IDP_time_arrive=  ifelse(F.f2.idp_time_arrive %in% c("1_month","3_months"),1,0),
     IDP_majority=  ifelse( F.f2.idp_perc %in% c("half","more_half"),1,0),
     food_inadequate= ifelse(G.food_now == "no", 1,0),
-    less_one_meal = ifelse(G.meals_number %in% c("one", "less_than_1"),1,0),
+    less_one_meal = ifelse(G.meals_number %in% c("one", less_one_meal_var),1,0),
     hunger_severe_worse = ifelse(S.shock_hunger %in% c("hunger_severe", "hunger_worst"),1,0),
     wildfood_sick_alltime = ifelse(G.food_wild_emergency=="yes"|G.food_wild_proportion=="more_half",1,0),
     skipping_days = ifelse(G.food_coping_comsumption.skip_days == "yes",1,0),

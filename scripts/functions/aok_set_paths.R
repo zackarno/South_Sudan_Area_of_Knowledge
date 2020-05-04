@@ -17,7 +17,7 @@ raw_data_folder<-paste0("inputs/" , monthly_folder,"/raw_data")
 field_cleaning_logs_folder_path <- paste0("inputs/" , monthly_folder,"/cleaning_logs")
 
 
-kobo_tool_input_path<-paste0("inputs/", monthly_folder,"/kobo_tool/2020_03_AoK_Tool_final.xlsx")
+kobo_tool_input_path<-paste0("inputs/", monthly_folder,"/kobo_tool/",monthly_folder,"_AoK_Tool_final.xlsx")
 
 prev_round_LT_input_path<-paste0("outputs/",
                                  prev_month_folder,
@@ -83,6 +83,10 @@ cleaning_log_output_file<- paste0("outputs/",
                                   "_cleaning_log_full_",
                                   month_label,
                                   "2020.csv")
+data_issues_output_prefix<-paste0("outputs/",
+                                  monthly_folder,
+                                  "/data_issues/",
+                                  monthly_folder,"_")
 
 new_master_settlement_output_path<-paste0("outputs/",
        monthly_folder,
