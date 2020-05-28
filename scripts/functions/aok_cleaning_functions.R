@@ -1,4 +1,27 @@
 
+
+
+rectify_new_settlements_with_data2 <-function(new_settlements, aok){
+
+  new_settlements<- new_settlements %>%
+    rename(new_sett_county="D.info_county",
+           new_sett_settlement="D.info_settlement_other")
+
+  new_sett_fixed<-new_settlements %>% left_join(aok %>% select(X_uuid, D.info_settlement_other,D.info_county),by=c("uuid"="X_uuid"))
+  new_sett_fixed<- new_sett_fixed %>%
+    mutate(
+      county_error= ifelse(D.info_county!= new_sett_county,1,0),
+      settlement_error= ifelse(D.info_settlement_other!= new_sett_settlement,1,0),
+    )
+  new_sett_fixed %>% return()
+}
+
+
+
+
+
+
+
 rectify_new_settlements_with_data <-function(new_settlements, aok){
   new_sett_fixed<-new_settlements %>% left_join(aok %>% select(X_uuid, D.info_settlement_other,D.info_county),by=c("uuid"="X_uuid"))
   new_sett_fixed<- new_sett_fixed %>%
@@ -14,7 +37,9 @@ rectify_new_settlements_with_data <-function(new_settlements, aok){
 
 
 
-exact_matches_to_cl<-function(exact_match_data,user="Jack",uuid_col, settlement_col){
+
+
+exact_matches_to_cl<-function(exact_match_data,user="Jack",uuid_col="uuid", settlement_col, county_col){
   if("sf" %in% class(exact_match_data)){
     exact_match_data<-exact_match_data %>% st_drop_geometry()
   }
@@ -48,7 +73,7 @@ exact_matches_to_cl<-function(exact_match_data,user="Jack",uuid_col, settlement_
              change_type="change_response",
              Sectors="Area_of_Knowledge",
              indicator="D.info_county",
-             current_value= D.info_county,
+             current_value= !!sym(county_col),
              new_value=county_use,
              issue="Enumerator filled incorrect county") %>%
       select(uuid, spotted, change_type, Sectors, indicator, current_value, new_value,issue)}
@@ -190,6 +215,54 @@ aok_to_grid<-function(aok_data, settlement_data, grid_data){
 
 
 }
+
+
+
+
+fix_swapped_lat_lon<-function(df, x,y, degree_threshold=10){
+  med_x<-median(df[[x]],na.rm=T)
+  med_y<-median(df[[y]],na.rm=T)
+  x_correct<- ifelse(abs(df[[x]]-med_x)>degree_threshold,df[[y]],df[[x]])
+  y_correct<- ifelse(abs(df[[y]]-med_y)>degree_threshold,df[[x]],df[[y]])
+  xy_df<-data.frame(longitude=x_correct,latitude=y_correct)
+  return(xy_df)
+}
+
+sp_join_where_possible<- function(df,admin){
+  df<-df %>%
+    mutate(index=1:nrow(.))
+  df_coords<- df %>% filter(!is.na(longitude), !is.na(latitude))
+  df_coords_sf <- df_coords %>% st_as_sf(coords=c("longitude","latitude"), crs=4326)
+  df_coords_joined<-df_coords_sf %>% st_join(admin %>% dplyr::select(adm2=admin2RefN))
+  df_no_coords<- df %>% filter(!index %in% df_coords$index)
+  df_coords_df<- df_coords_joined %>% st_drop_geometry_keep_coords() %>% rename(longitude="X",latitude="Y")
+  df_final<-bind_rows(df_coords_df,df_no_coords) %>%  arrange(index)
+  return(df_final)
+}
+
+check_new_settlements_with_master<- function(new_settlement,
+                                             master,
+                                             sett_name= "D.info_settlement" ,
+                                             county="D.info_county" ,
+                                             sett_name_correction){
+  master<- master %>%
+    mutate(name_county_low=NAMECOUNTy %>% tolower_rm_special)
+  new_settlement<- new_settlement %>%
+    mutate(
+      name_county_low= paste0(sett_name, county) %>% tolower_rm_special(),
+      name_county_low_corr= paste0(sett_name_correction, county) %>% tolower_rm_special(),
+      check_name_county_low=paste0(name_county_low %in% master$name_county_low),
+      check_name_county_low_corr=paste0(name_county_low_corr %in% master$name_county_low),
+      correct_sett_name =
+        case_when(
+          name_county_low %in% master$name_county_low~  sett_name,
+          name_county_low_corr %in% maste$name_county_low ~ sett_name_correction,
+          TRUE ~ "not in master"
+        )
+    )
+}
+
+
 
 
 # returns string w/o leading or trailing whitespace

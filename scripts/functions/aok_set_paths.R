@@ -7,10 +7,11 @@ gdb<- "inputs/gis_data"
 
 
 monthly_folder<-month_input_data %>% str_replace_all("-","_") %>% str_sub(end=7)
-month_label<-month(month_input_data,label = T)%>% as.character()
+month_label<-lubridate::month(month_input_data,label = T)%>% as.character()
+
 prev_month<-month_input_data %>% ymd() %m-% months(1)
 prev_month_folder<-prev_month %>% str_replace_all("-","_") %>% str_sub(end=7)
-prev_month_label<- month(prev_month, label=T) %>% as.character()
+prev_month_label<- lubridate::month(prev_month, label=T) %>% as.character()
 
 
 raw_data_folder<-paste0("inputs/" , monthly_folder,"/raw_data")
@@ -23,16 +24,17 @@ prev_round_LT_input_path<-paste0("outputs/",
                                  prev_month_folder,
                                  "/aggregated_data/",
                                  prev_month_folder,
-                                 "_reach_ssd_settlement_aggregated_LONGTERM_AoK_Feb2020.csv")
+                                 "_reach_ssd_settlement_aggregated_LONGTERM_AoK_",
+                                 prev_month_label,"2020.csv")
 
 #READ IN LATEST MASTER SETTLEMENT LIST
 master_settlement_list_from_previous_round_input_path <- paste0("outputs/",
                                               prev_month_folder,
                                               "/settlement_lists/",
                                               prev_month_folder,
-                                              "_MASTER_SETTLEMENT_list_from_",
+                                              "_MASTER_SETTLEMENT_list_UPDATED_with_",
                                               prev_month_label,
-                                              "_Data_for_next_round.csv")
+                                              "_Data.csv")
 
 new_settlement_folder<-paste0("inputs/",monthly_folder,"/new_settlements")
 
@@ -40,9 +42,9 @@ itemset_previous_month_input_file<-paste0("outputs/",
                          prev_month_folder,
                          "/settlement_lists/",
                          prev_month_folder,
-                         "_ITEMSET_UPDATED_from_",
+                         "_ITEMSET_UPDATED_with_",
                          prev_month_label,
-                         "_Data_for_next_round.csv")
+                         "_Data.csv")
 
 
 # outputs -----------------------------------------------------------------
@@ -73,9 +75,9 @@ itemset_output_file_name<- paste0("outputs/",
                                   monthly_folder,
                                   "/settlement_lists/",
                                   monthly_folder,
-                                  "_ITEMSET_UPDATED_from_",
+                                  "_ITEMSET_UPDATED_with_",
                                   month_label,
-                                  "_Data_for_next_round.csv")
+                                  "_Data.csv")
 cleaning_log_output_file<- paste0("outputs/",
                                   monthly_folder,
                                   "/cleaning_logs/",

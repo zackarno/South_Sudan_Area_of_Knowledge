@@ -5,8 +5,9 @@ library(koboloadeR)
 library(lubridate)
 library(sf)
 
+
 iso_date<- Sys.Date() %>%  str_replace_all("-","_")
-month_input_data<-"2020-03-01"
+month_input_data<-"2020-04-01"
 
 source("scripts/functions/aok_aggregation_functions.R")
 source("scripts/functions/aok_cleaning_functions.R")
@@ -30,41 +31,175 @@ data_issues<-list()
 adm2<- st_read(gdb,"ssd_admbnda_adm2_imwg_nbs_20180401", stringsAsFactors = F ) %>% st_transform(adm2,crs=4326)
 payams<-st_read(gdb, "ssd_bnd_adm3_wfpge_un", stringsAsFactors = F )
 
-master_settlement<-read.csv(master_settlement_list_from_previous_round_input_path,
-                  strip.white = T, stringsAsFactors = T,na.strings = c(" ",""))
 
+master_settlement<-read.csv(master_settlement_list_from_previous_round_input_path,
+                  strip.white = T, stringsAsFactors = F,na.strings = c(" ","", "NA"))
+
+
+itemset_previous<-read.csv(itemset_previous_month_input_file,strip.white = T, stringsAsFactors = F,na.strings = c(" ",""))
+itemset_setts<-itemset_previous %>% filter(list_name=="settlements")
+
+
+#READ IN NEW SETTLEMENTS FROM THE FIELDS
+new_settlements<- butteR::read_all_csvs_in_folder(new_settlement_folder)
+
+new_sett<- bind_rows(new_settlements)
+
+new_sett_comp<- new_sett %>% filter(!is.na(longitude), !is.na(latitude))
+
+
+new_sett_clean1<-new_sett %>% filter(!is.na(uuid))
+# new_sett %>% filter(!is.na(uuid)) %>% group_by(uuid) %>% mutate(num_uuids=n()) %>% filter(num_uuids>1)
+# new_settlements %>% group_by(uuid) %>% mutate(sdf=n()) %>% filter(sdf>1)
+
+
+
+itemset_setts<-itemset_setts %>%
+  mutate(name_county_low= paste0(name,admin_2) %>% tolower_rm_special())
+master_settlement<- master_settlement %>%
+  mutate(name_county_low= paste0(NAMECOUNTY) %>% tolower_rm_special())
+master_settlement %>% left_join(itemset_setts, by="name_county_low") %>% filter(is.na(list_name))
+itemset_setts %>% left_join(master_settlement, by="name_county_low")# %>% filter(is.na(list_name))
+
+#this is goood... no values in item set that are not in master.
+master_settlement %>% left_join(itemset_setts, by= c("NAMEJOIN"="name","COUNTYJOIN"="admin_2")) %>% filter(is.na(NAMECOUNTY))
+
+
+
+
+# master_settlement %>% filter(str_detect(NAME,"^Thor")) %>% select(NAME,COUNTYJOIN)
 #THIS IS USEFUL LATER WHEN WE WILL BE DOING FUZZY MATCHING DISTANCE/NAME MATCHING TO KNOW WHICH COLUMNS COME FROM MASTER
 colnames(master_settlement)<-paste0("mast.",colnames(master_settlement))
-master_settlement_sf<- st_as_sf(master_settlement,coords=c("mast.X","mast.Y"), crs=4326)
 
-itemset_previous<-read.csv(itemset_previous_month_input_file,strip.white = T, stringsAsFactors = T,na.strings = c(" ",""))
-cleaning_log_format<-c("multiple_csvs","multiple_xlsx")[2]
+master_settlement_sf<- st_as_sf(master_settlement,coords=c("mast.X","mast.Y"), crs=4326)
+#SOME WEIRD CRAP GOING ON HERE
+master_settlement %>% select(mast.NAME, mast.NAMEJOIN)
+
+
+
+# wtf<-master_settlement %>% filter(!is.na(mast.ALT_NAME1))
+# master_settlement %>% filter(str_detect(string = mast.NAME, "^Thor"))
+# wtf$mast.ALT_NAME1
+# master_settlement_sf %>% filter_at(.vars = c("mast.ALT_NAME1","mast.ALT_NAME2"),all_vars(!is.na(.)))
+
+# notes
+# itemset name == master settlement namejoin
+# itemset label == itemset names , but "_" replaced by " "
+# D.info_settlement == masters settlement name
+# admin_2 == D.info_county
+# there are lots of mistakes in this because of the master list?
+# need to run from february but filter the itemset to just settlements
+#############GOOOOOOOOOOOOOOOO SLOW
+
+
+
+
+
+
+
+
+
+
+
+
+
+cleaning_log_format<-c("multiple_csvs","multiple_xlsx")[1]
 
 
 # LOAD RAW DATA -----------------------------------------------------------
 
+
 aok_raw_list <-butteR::read_all_csvs_in_folder(input_csv_folder = raw_data_folder)
 
-purrr::map(aok_raw_list,nrow)
+aok_raw_list %>% purrr::map(nrow)
+colnames(aok_raw_list$aok_raw_data_v40_1.csv)<- str_replace_all(colnames(aok_raw_list$aok_raw_data_v40_1.csv),"covid_awareness\\.","CVD.")
+colnames(aok_raw_list$aok_raw_data_v40_2.csv)<- str_replace_all(colnames(aok_raw_list$aok_raw_data_v40_2.csv),"covid_awareness\\.","CVD.")
 
 aok_raw<- dplyr::bind_rows(aok_raw_list)
-aok_raw %>% nrow()
+aok_raw$SU.Q.ha_type
+bad_groups_that_were_added_v4<-paste0("^",c("SU.","P_001.","CVD.","csrf."),collapse="|")
+colnames(aok_raw)<- colnames(aok_raw) %>% str_replace_all(bad_groups_that_were_added_v4,"")
+# aok_raw$Q.ha_type %>% table() %>% data.frame()
+# table_to_data_frame<-function(x){
+#   result<-x %>% table() %>% data.frame
+#   return(result)
+# }
+# function(x){
+#   x==355
+# }
+#
+# class(asdf[[20]])
+# asdf[[100]]
+# asdf[[1]]
+# asdf<-aok_raw %>% purrr:::map(table_to_data_frame) %>%
+#   flatten %>%
+#   keep(~.x[[Freq]] == 355)
 
 
+aok_raw<-aok_raw %>%
+  mutate(Q.ha_type=str_replace_all(Q.ha_type,c("^in_kind"="through_in_kind")))
+
+na_response_table<-butteR::get_na_response_rates(aok_raw) %>% arrange(desc(perc_non_response))
 #MAKE SURE ALL UUIDS ARE UNIQUE BECAUSE SOMETIMES DATA COMES FROM MULTIPLE SOURCES
 aok_raw <- distinct(aok_raw,X_uuid, .keep_all= TRUE)
 
+aok_raw %>% nrow()
 #THIS BUTTER FUNCTION WORKS EVEN THOUGH THEY DOWNLOAD THE DATA WITH GROUPS
 sm_cols_df<-butteR::extract_sm_option_columns(df = aok_raw,name_vector=colnames(aok_raw))
 
 convert_logical_to_yn<-function(x){
-  x %>% as.character() %>% str_replace_all(c("1"="yes","0"="no"))
+  # x %>% as.character() %>% str_replace_all(c("1"="yes","0"="no"))
+  x %>% as.character() %>% str_replace_all(c("TRUE"="yes","FALSE"="no"))
 }
 
 #SSD DOWNLOADS SELELCT MULTIPLE AS BINARY (0,1) INTEGERS- CONVERT THESE TO YES,NO
 aok_raw<-aok_raw %>%
   mutate_at(.vars= sm_cols_df$sm_options,.funs = convert_logical_to_yn)
 
+aok_raw %>% select(sm_cols_df$sm_options)
+
+
+
+new_sett_fix_base<-aok_raw %>%
+  filter(D.info_settlement=="other") %>%
+  select(X_uuid,A.base, D.info_state,D.info_county,D.info_settlement_other) %>%
+  arrange(A.base,D.info_settlement_other) #%>%
+          # write.csv("outputs/2020_04/data_issues/2020_04_aok_data_new_settlements.csv",row.names = F)
+new_sett_fix_base %>% arrange(D.info_settlement_other)
+new_sett_comp<-new_sett_comp %>% mutate(name_county_low=paste0(D.info_county,D.info_settlement_other) %>% tolower_rm_special())
+
+new_sett_fix_base<-new_sett_fix_base %>% mutate(name_county_low=paste0(D.info_county,D.info_settlement_other) %>% tolower_rm_special())
+new_sett_use<-new_sett_fix_base %>% left_join(new_sett_comp %>% select( name_county_low, longitude, latitude,action,new_spelling),
+                                by="name_county_low"
+                                ) %>% as_tibble() %>%
+  rename(uuid="X_uuid")
+# write.csv(new_sett_use, "new_sett_use_base_template.csv")
+new_sett_use_no_coordinate<- new_sett_use %>% filter(is.na(longitude), is.na(latitude))
+
+aok_raw<-aok_raw %>% filter(!X_uuid %in% new_sett_use_no_coordinate$uuid)
+aok_raw %>% nrow() # cool deleted those 14 records
+
+# write.csv(new_sett_use,"asdfadsfa.csv")
+# debugonce(rectify_new_settlements_with_data2)
+# new_sett_rect<-rectify_new_settlements_with_data2(new_settlements = new_sett_clean1,aok = aok_raw)
+# asdf %>% View()
+# asdf<-rectify_new_settlements_with_data(new_settlements = new_sett_clean1,aok = aok_raw)
+# asdf %>% View()
+
+
+# new_sett_clean1 %>%
+  # mutate(wrong_uuid=ifelse(!uuid%in%aok_raw$X_uuid,"uuid_not_in_data","uuid_ok")) #%>%
+
+#this was useful to realize the errors before
+#######################################################################################
+# new_sett_rect %>%
+#   mutate(wrong_uuid=ifelse(!uuid%in%aok_raw$X_uuid,"uuid_not_in_data","uuid_ok"),
+#          wrong_uuid_2= case_when(is.na(county_error)~ "uuid_not_in_data",
+#                                  county_error==1& settlement_error==1~"wrong settlement & wrong county",
+#                                  settlement_error==1~ "wrong settlement",
+#                                  TRUE~ "wrong county")
+#          ) %>% write.csv("outputs/2020_04/data_issues/2020_04_new_settlements_wrong_uuids.csv")
+# new_sett_clean1 %>% nrow()
 
 # JUST AN EARLY CHECK TO MAKE SURE ALL SETTLEMENTS LISTED IN MAIN SETTLEMENT COLUMN EXIST IN THE MASTER DATA SET- THEY BETTER
 aok_raw<-aok_raw %>%
@@ -86,7 +221,7 @@ if(nrow(check_all_settlements_against_master)==0){
 
 
 # STEP 1 COMPILE CLEANING LOGS --------------------------------------------
-
+cleaning_log_format<-"multiple_csvs"
 if(cleaning_log_format=="multiple_csvs"){
   cleaning_logs<-butteR::read_all_csvs_in_folder(input_csv_folder = field_cleaning_logs_folder_path)
   cleaning_log<-bind_rows(cleaning_logs)
@@ -103,6 +238,8 @@ if(cleaning_log_format=="multiple_xlsx"){
     cleaning_logs[[file_name_temp]]<-df
   }
   cleaning_log<-bind_rows(cleaning_logs)}
+
+
 #QUICK CHECK -- SOMETIMES AOS PROVIDE DIFFERENT NAMES FOR UID
 num_uuid_in_cl<-cleaning_log %>% select(contains("uid")) %>% colnames() %>% length()
 if(num_uuid_in_cl>1){
@@ -112,9 +249,19 @@ if(num_uuid_in_cl>1){
 
 #ADD BASE TO CLEANING LOG
 cleaning_log<- cleaning_log %>% left_join(aok_raw %>%
-                                            select(X_uuid,A.base ), by=c("uuid"="X_uuid"))
+                                            select(X_uuid,A.base ), by=c("uuid"="X_uuid")) %>%
+  mutate(z_id=paste0("z_",1:nrow(.)))
 
-cleaning_log_actionable<- cleaning_log %>% filter(change_type!="no_action")
+cleaning_log$change_type %>% table()
+#good basically all uuids are in data
+# cleaning_log %>% filter(!uuid %in% aok_raw$X_uuid)
+cleaning_log_actionable<- cleaning_log %>% filter(change_type!="no_action" & !is.na(change_type)&!is.na(uuid))
+cleaning_log_actionable$indicator<-cleaning_log_actionable$indicator %>% str_replace_all("SU.","") #%>% tolower()
+
+
+# weird_cases<-cleaning_log_actionable %>% filter(change_type=="change_response") %>% as_tibble() %>% filter(!new_value %in% kc$name) %>% pull(z_id)
+# cleaning_log %>%
+  # mutate(new_val_prob=ifelse(z_id %in% weird_cases,T,F)) %>% write.csv("outputs/2020_04/data_issues/2020_04_cleaning_log_new_value_prob.csv")
 
 # MULTIPLE CLEANING LOGS WILL BE CREATED FOR FINAL DOCUMENTATION, FOR THE TIME BEING LETS STORE IN A LIST
 
@@ -128,17 +275,33 @@ aok_cleaning_checks1<-butteR::check_cleaning_log(df = aok_raw, df_uuid = "X_uuid
                                                 cl_uuid = "uuid",
                                                 cl_new_val = "new_value")
 
+
+
+
 #VIEW PROBLEMS IN CLEANING LOG
-
+# aok_cleaning_checks1 %>% write.csv("outputs/2020_04/data_issues/2020_04_cleaning_log_issues_round2.csv")
+# aok_cleaning_checks1 %>% View()
 data_issues[["field_CL_issues"]]<-aok_cleaning_checks1
+# cleaning_issues1<-cleaning_log_actionable %>% mutate(issue= paste0(uuid,indicator) %in%
+#                                                        paste0(aok_cleaning_checks1$uuid,aok_cleaning_checks1$indicator ))
 
+# cleaning_issues1 %>% filter(issue==TRUE) %>% nrow()
+# write.csv(cleaning_issues1,"outputs/2020_04/data_issues/2020_04_compiled_cleaning_log_with_issue_filter.csv")
 #WE WILL HAVE TO DELETE THESE BECAUSE THERE WAS NO REVISION FROM THE FIELD (ITS OK)
 cleaning_log_actionable<- cleaning_log_actionable %>%
   filter(!uuid%in%aok_cleaning_checks1$uuid)
 
+#they are not supposed to touch the new settlements in the logs
+remove_from_cl<-cleaning_log_actionable %>% filter(str_detect(string = indicator, "^D.info_settlement")) %>% filter(change_type=="change_response") %>% pull(uuid)
+cleaning_log_actionable<- cleaning_log_actionable %>% filter(!uuid %in% remove_from_cl)
+
+
 cleaning_log_list[["field_cl"]]<-cleaning_log_actionable %>% mutate(source="field")
 
+
+
 #RE-RUN CHECKS WITH FILTERED CLEANING LOG... SHOULD BE  NO PROBLEM
+
 aok_cleaning_checks2<-butteR::check_cleaning_log(df = aok_raw, df_uuid = "X_uuid",
                                                 cl = cleaning_log_actionable,
                                                 cl_change_type_col = "change_type",
@@ -148,7 +311,14 @@ aok_cleaning_checks2<-butteR::check_cleaning_log(df = aok_raw, df_uuid = "X_uuid
 
 
 
+# I NEED TO FIGURE OUT WHY  THE CHECK IS NOT CATCHING THIS ISSUE, BUT THE IMPLEMENTATION IS
+cleaning_log_actionable<- cleaning_log_actionable %>% mutate(
+  indicator=ifelse(str_detect(indicator,"^covid"), paste0("CVD.",indicator),indicator)
+)
 
+
+
+# debugonce(implement_cleaning_logz)
 aok_clean<-butteR::implement_cleaning_log(df = aok_raw, df_uuid = "X_uuid",
                                           cl = cleaning_log_actionable,
                                           cl_change_type_col = "change_type",
@@ -157,8 +327,22 @@ aok_clean<-butteR::implement_cleaning_log(df = aok_raw, df_uuid = "X_uuid",
                                           cl_new_val = "new_value")
 aok_raw %>% nrow();  aok_clean %>% nrow(); aok_raw %>% nrow() - aok_clean %>% nrow()
 
+aok_clean %>%
+  mutate(name_county_low=paste0(D.info_settlement,D.info_county) %>% butteR::tolower_rm_special()) %>%
+  filter(D.info_settlement!="other") %>%
+  filter(!name_county_low%in% master_settlement_sf$name_county_low) %>%
+   select(X_uuid,A.base,name_county_low, D.info_county,D.info_settlement,D.info_settlement_other)
+
+
+# "Akoka"~ "Baliet"
+# "Dhorgoyni" ~  "Dhorgonni"
+
+
+
+
 if(aok_clean %>%
   filter(D.info_settlement!="other") %>%
+  mutate(name_county_low=paste0(D.info_settlement,D.info_county) %>% butteR::tolower_rm_special()) %>%
   filter(!name_county_low%in% master_settlement_sf$name_county_low) %>% nrow()>0){
   print("BAD - cleaning log has added a new settlement that doesnt belong in new settlement list")
 }else{
@@ -171,18 +355,30 @@ if(aok_clean %>%
 # PERHAPS THE MOST DIFFICULT STEP
 # OUTPUTS: NEW ITEMSET, NEW MASTER SETTLEMENT FILE, CLEANING LOG
 
-#READ IN NEW SETTLEMENTS FROM THE FIELDS
-new_settlements<- butteR::read_all_csvs_in_folder(new_settlement_folder)
-new_sett<- bind_rows(new_settlements)
+
 
 # AOS INSTRUCTED TO TAKE THE NEW SETTLEMENT LIST DIRECTLY FROM THE DATA, BUT IN CASE THIS INSTRUCTION IS NOT FOLLOWED
 # THIS JUST CORRECTS ANY OF THE NEW SETTLEMENTS TO THE DATA BY THE UUID (TOOK HOURS TO REALIZE THIS FUNCTION COULD AVOID HEADACHE LATER ON)
-new_sett<-rectify_new_settlements_with_data( new_settlements = new_sett,aok =  aok_clean)
 
-new_sett<-new_sett %>%
-  mutate(
-    D.info_settlement_other=ifelse(is.na(D.info_settlement_other),New.settlements,D.info_settlement_other)
-  )
+new_sett<-new_sett %>% filter(!is.na(latitude), !is.na(longitude))
+round<-40
+if(round==40){
+new_sett<-new_sett_use
+}
+# new_sett<-rectify_new_settlements_with_data( new_settlements = new_sett,aok =  aok_raw)
+# new_sett %>%
+  # mutate(name_county_low=paste0(D.info_county,D.info_county) %>% butteR::tolower_rm_special()) %>%
+
+aok_clean_other<- aok_clean %>%
+  filter(!is.na(D.info_settlement_other)) %>% select(X_uuid,A.base,D.info_settlement, D.info_settlement_other) %>% arrange(A.base)
+
+
+
+
+# new_sett<-new_sett %>%
+  # mutate(
+    # D.info_settlement_other=ifelse(is.na(D.info_settlement_other.x),New.settlements,D.info_settlement_other)
+  # )
 
 
 # IF THE CLEANING LOGS DO CONTAIN ENTRIES WHERE THY HAVE CHANGED SETTLEMENTS IN DATA, BUT NOT IN NEW SETTLEMENTS, THIS WILL
@@ -196,27 +392,48 @@ sett_aok_id_key<- aok_raw %>%
   inner_join(sett_aok_id_key, by= c("X_uuid"="uuid")) %>%
   select(old_value=D.info_settlement_other, new_value)
 
+
+round<-40
+if(round==39){
 new_sett_with_key<-new_sett %>%
   left_join(sett_aok_id_key,
             by= c("D.info_settlement_other"="old_value"))
+new_sett2<- new_sett_with_key %>%
+  mutate(name_new_settlement= ifelse(!is.na(new_value), new_value, D.info_settlement_other)) %>%
+
+  select(-D.info_settlement_other)
+
+}
+
+new_sett2 <- new_sett %>%
+  mutate(
+    name_new_settlement=D.info_settlement_other
+  )
 
 # IF THEY HAVE CHANGED THE COLUMN D.INFO_SETTLEMENT_OTHER COLUMN WITH THE CLEANING LOG, THIS WILL SWITCH THE VAR OF INTEREST
 # TO REFLECT THAT CHANGE IN THE NEW SETTLEMENT SHEET
-new_sett2<- new_sett_with_key %>%
-  mutate(name_new_settlement= ifelse(!is.na(new_value), new_value, D.info_settlement_other)) %>%
-  select(-D.info_settlement_other)
-
-
 
 #CANT DO ANYTHING WITH NEW SETTLEMENTS THAT DONT HAVE COORDINATES
 new_sett3<-new_sett2 %>%
-  filter(!is.na(longitude), !is.na(latitude))
+  filter(!is.na(longitude)& !is.na(latitude))
 
 
 new_sett_no_coords<-new_sett2 %>% filter(is.na(longitude)|is.na(latitude))
 if(nrow(new_sett_no_coords)>0){
   data_issues[["new_settlement_sheet_entries_no_COORDS"]]<-new_sett_no_coords
 }
+
+
+fix_swapped_lat_lon<-function(x,y, degree_threshold=10){
+  med_x<-median(x)
+  med_y<-median(y)
+  x_correct<- ifelse(abs(x-med_x)>degree_threshold,y,x)
+  y_correct<- ifelse(abs(y-med_y)>degree_threshold,x,y)
+  xy_df<-data.frame(longitude=x_correct,latitude=y_correct)
+  return(xy_df)
+}
+
+new_sett3[,c("longitude","latitude")] <- fix_swapped_lat_lon(new_sett3$longitude,new_sett3$latitude)
 
 new_sett_sf<-st_as_sf(new_sett3,coords=c("longitude","latitude"), crs=4326)
 
@@ -240,26 +457,39 @@ master_settlement_sf<-master_settlement_sf %>%
     mast.settlement_county_sanitized= mast.NAMECOUNTY %>% tolower_rm_special()
   )
 
-  # CHECK IF NEW SETTLEMENTS HAVE BEEN FIXED IN CL --------------------------
+# CHECK IF NEW SETTLEMENTS HAVE BEEN FIXED IN CL --------------------------
+# new_sett_sf %>% View()
+
 
 remove_from_new_sett<-aok_clean %>%
   filter(X_uuid %in% new_sett_sf$uuid  & is.na(D.info_settlement_other))%>%
   select(X_uuid,D.info_settlement) %>% pull(X_uuid)
-
+new_sett_sf %>% filter(uuid==remove_from_new_sett)
+aok_raw %>% filter(X_uuid==remove_from_new_sett) %>% select(D.info_settlement,D.info_settlement_other)
 # THIS CONTINUES TO BE A MASSIVE PROBLEM FOR THE FIELD -- ENUMERATORS PUT A NEW SETTLEMENT, BUT IT
 # IS NOT CAPTURED IN THE NEW SETTLEMENT TAB. NOT REALLY ACCEPTABLE, BUT THERE IS NOTHING WE CAN DO AT THIS POINT
 # OTHER THAN OUTPUT THE ERRORS AND HOPE THEY CAN FIX THEM (NO LUCK SO FAR)
 
-aok_other_not_in_settlement_data<-aok_clean %>%
-  filter(!is.na(D.info_settlement_other)) %>%
-  filter(!X_uuid %in% new_sett_sf$uuid) %>%
-  select(X_uuid,A.base,D.info_settlement, D.info_settlement_other) %>%
-  arrange(A.base) # %>%
+if(round==39){
+  aok_other_not_in_settlement_data<-aok_clean %>%
+    filter(!is.na(D.info_settlement_other)) %>%
+    filter(!X_uuid %in% new_sett_sf$uuid) %>%
+    select(X_uuid,A.base,D.info_county,D.info_settlement, D.info_settlement_other) %>%
+    arrange(A.base) }
+
+#not quite right
+if(round==40){
+  aok_other_not_in_settlement_data<-aok_clean %>%
+    filter(!is.na(D.info_settlement_other)) %>%
+    filter(!X_uuid %in% new_sett_sf$uuid) %>%
+    select(X_uuid,A.base,D.info_county,D.info_settlement, D.info_settlement_other) %>%
+    arrange(A.base) }
+
 
 if(nrow(aok_other_not_in_settlement_data)>0){
 data_issues[["AoK_other_settlements_no_coordinates_in_new_settlement"]]<-aok_other_not_in_settlement_data}
 
-
+# aok_other_not_in_settlement_data %>% write.csv('outputs/2020_04/data_issues/2020_04_aok_settlements_not_in_new_settlements.csv')
 
 
 # EVEN AFTER CLEANING FROM THE FIELD THERE ARE SETTLEMENTS GIVEN AS NEW SETTLEMENTS, BUT THEY MATCH EXACTLY NEW SETTLEMENTS
@@ -284,16 +514,16 @@ aok_exact_matches_cl<-exact_matches_to_cl(exact_match_data = exact_matches1,
                                           user = "Zack",
                                           uuid_col = "uuid",
                                           settlement_col = "name_new_settlement")
-
+aok_exact_matches_cl %>% View()
 # IF THERE IS A FAULTY UUID IN THE NEW SETTLEMENT DATA THIS WILL GET RID OF IT
 aok_exact_matches_cl_filt<-aok_exact_matches_cl %>%
   filter(uuid %in% aok_clean$X_uuid)
 
 #ADD THIS NEW CLEANIGN LOG TO THE LIST
-cleaning_log_list[["auto_gen_exact_matches"]]<- aok_exact_matches_cl_filt %>% mutate(source="auto-generated")
-
+cleaning_log_list[["auto_gen_exact_matches"]]<- aok_exact_matches_cl_filt %>% mutate(source="auto-generated") %>% distinct()
+cleaning_log_list$auto_gen_exact_matches %>% View()
 # IMPLEMENT THE NEW LOG
-aok_clean2<-butteR::implement_cleaning_log(df = aok_clean,df_uuid = "X_uuid",
+aok_clean2<-implement_cleaning_log(df = aok_clean,df_uuid = "X_uuid",
                                            cl = aok_exact_matches_cl_filt,
                                            cl_change_type_col = "change_type",
                                            cl_change_col = "indicator",
@@ -305,6 +535,8 @@ aok_clean2<-butteR::implement_cleaning_log(df = aok_clean,df_uuid = "X_uuid",
 # FUZZY NEW SETTLEMENT MATCHING -------------------------------------------
 
 #REMOVE THE SETTLEMENTS THAT EXACT MATCHES FROM THE LIST
+
+
 new_sett_sf_unmatched<- new_sett_sf %>% filter(!uuid %in% exact_matches1$uuid)
 
 
@@ -319,6 +551,9 @@ new_with_closest_old<-butteR::closest_distance_rtree(new_sett_sf_unmatched %>%
                                                        st_as_sf(coords=c("X","Y"), crs=4326) ,master_settlement_sf_not_matched)
 # new_with_closest_old$name_new_settlement
 #CLEAN UP DATASET
+
+
+
 new_with_closest_old_vars<-new_with_closest_old %>%
   mutate(new.D.info_settlement_other= name_new_settlement %>% gsub("-","_",.)) %>%
   select(uuid,
@@ -347,7 +582,8 @@ settlements_best_guess<-new_with_closest_old_vars %>%
 # HOWEVER, TO KEEP EVERYTHING IN THE R ENVIRONMENT- HERE IS AN INTERACTIVE FUNCTION TO MODIFY THE SETTLEMENT BEST GUESS DF IN PLACE
 # OUTUT WILL BE A CLEANING LOG (IF THERE ARE CHANGES TO BE MADE)
 
-
+fuzzy_settlement_matching_done<-"yes"
+write_auto_gen_cleaning_logs<-"no"
 if(fuzzy_settlement_matching_done=="no"){
   new_settlement_evaluation<-evaluate_unmatched_settlements(user= "zack",new_settlement_table = settlements_best_guess, uuid_col="uuid")
   if(write_auto_gen_cleaning_logs=="yes"){
@@ -357,6 +593,8 @@ if(fuzzy_settlement_matching_done=="no"){
   }
 
 }
+
+
 
 if(fuzzy_settlement_matching_done=="yes"){
   new_settlement_evaluation<-list()
@@ -389,7 +627,7 @@ if(is.character(auto_gen_settlement_evaluated_CL_check )==F){
 # HERE IT IS BECAUSE THESE ROWS OF DATA WERE DROPPED IN AN EARLIER CLEANING LOG
 # CLEANING PROCESS-- SO JUST REMOVE THEM FROM THE LOG
 new_settlement_evaluation$cleaning_log<- new_settlement_evaluation$cleaning_log %>%
-  filter(uuid %in%  aok_clean2$X_uuid)
+  filter(uuid %in%  aok_clean2$X_uuid) %>% distinct()
 auto_gen_settlement_evaluated_CL_check2<-butteR::check_cleaning_log(df = aok_clean2,df_uuid = "X_uuid",
                                                                    cl =new_settlement_evaluation$cleaning_log,
                                                                    cl_change_type_col = "change_type",
@@ -415,7 +653,7 @@ aok_clean3<-butteR::implement_cleaning_log(df = aok_clean2,df_uuid = "X_uuid",
 
 new_settlement_evaluation$cleaning_log_cols_modified<-new_settlement_evaluation$cleaning_log %>% select(uuid,action,spotted,change_type,Sectors,suggested_indicator:suggested_new_value)
 colnames(new_settlement_evaluation$cleaning_log_cols_modified)<- colnames(new_settlement_evaluation$cleaning_log_cols_modified) %>% str_replace_all("suggested_","")
-cleaning_log_list[["auto_gen_settlements_evaluated"]]<- new_settlement_evaluation$cleaning_log_cols_modified %>% mutate(source="auto-generated")
+cleaning_log_list[["auto_gen_settlements_evaluated"]]<- new_settlement_evaluation$cleaning_log_cols_modified %>% mutate(source="auto-generated")%>% arrange(uuid)
 
 
 
@@ -440,8 +678,7 @@ itemset_full_binded<- bind_rows(list(itemset_binded,itemset_other))
 
 
 if(output_new_settlement_data=="yes"){
-write.csv(itemset_full_binded,itemset_output_file_name)
-  }
+write.csv(itemset_full_binded,itemset_output_file_name)}
 
 
 # NEXT WE ADD THE NEW SETTLEMENTS TO THE SHAPEFILE ------------------------
@@ -470,6 +707,7 @@ master_settlement_adj<- master_settlement_adj %>%
 
 # new_sett_sf
 
+
 new_setts_add_to_master<-new_settlement_evaluation$checked_setlements %>%
   filter(action==2) %>%
   mutate(
@@ -494,6 +732,7 @@ new_setts_add_to_master<-new_setts_add_to_master %>% select(NAME,NAMEJOIN,NAMECO
 
 new_setts_add_to_master$DATE<-new_setts_add_to_master$DATE %>% as.character()
 master_new<-bind_rows(new_setts_add_to_master,master_settlement_adj )
+
 master_new %>% nrow()
 master_settlement_adj %>% nrow()+ nrow(new_setts_add_to_master)
 
@@ -600,10 +839,10 @@ prev_round<-read.csv(prev_round_LT_input_path, stringsAsFactors = FALSE, na.stri
 ks<-readxl::read_xlsx(path = kobo_tool_input_path, sheet = "survey")
 kc<-readxl::read_xlsx(path = kobo_tool_input_path, sheet = "choices")
 
-
+# ks<- ks %>% filter(name!="SU")
 # debugonce(aggregate_aok_by_settlement)
 
-aggregations_script<-c("v2","v3")[2]
+aggregations_script<-c("v2","v3","v4")[3]
 if(aggregations_script=="v2"){
 source("scripts/functions/aok_aggregate_settlement2.R")
 aok_clean_aggregated_settlement<-aggregate_aok_by_settlement(clean_aok_data = aok_clean4,
@@ -612,39 +851,93 @@ aok_clean_aggregated_settlement<-aggregate_aok_by_settlement(clean_aok_data = ao
 )}
 if(aggregations_script=="v3"){
 source("scripts/functions/aok_aggregate_settlement3.R")
+# debugonce(aggregate_aok_by_settlement)
 aok_clean_aggregated_settlement<-aggregate_aok_by_settlement(clean_aok_data = aok_clean4,
                                                               current_month = month_input_data,
-                                                              kobo_survey_sheet = ks)}
+                                                              kobo_survey_sheet = ks)
+}
 
 
 
-# use kobold package to impute skip logic ---------------------------------
+
+# bad_groups_that_were_added_v4<-paste0(c("SU.","P_001.","CVD.","csrf."),collapse="|")
+# The columns `aware_covid`, `aware_covid_spread`, `covid_info_source`, `conflict_increase`, `consent_ki_future`, etc. don't exist.
+aok_clean5<-aok_clean4
+colnames(aok_clean5) <- colnames(aok_clean5) %>% str_replace_all(bad_groups_that_were_added_v4,"")
+
+
+
+
+# make a column name lookup table -----------------------------------------
+
 # first need to remove groups
-colname_table<-data.frame(no_groups=butteR::remove_kobo_grouper(colnames(aok_clean_aggregated_settlement),max_prefix_length = 3) %>% butteR::remove_kobo_grouper(max_prefix_length = 3), with_groups=colnames(aok_clean_aggregated_settlement))
-aok_clean_aggregated2<-aok_clean_aggregated_settlement
-colnames(aok_clean_aggregated2)<- colname_table$no_groups
+colname_table<-tibble(no_groups=colnames(aok_clean5) %>%
+                            butteR::remove_kobo_grouper(max_prefix_length = 3) %>%
+                            butteR::remove_kobo_grouper(max_prefix_length = 3) ,
+                          with_groups=colnames(aok_clean5) %>% as.character())
+
+
+if(aggregations_script=="v4"){
+source("scripts/functions/aok_aggregate_settlement4.R")
+
+  # aggregate_aok_by_settlement %>% debugonce()
+  aok_clean_aggregated_settlement<-aggregate_aok_by_settlement(clean_aok_data = aok_clean5,
+                                                              current_month = month_input_data,
+                                                              kobo_survey_sheet = ks)
+}
+
+
+
+
+
+
+# use kobold to impute skip logic -----------------------------------------
 
 # have to get rid of rows in kobo survey sheet that are no longer in aggregated data first
 ks2<-ks %>%
-  filter(name%in% colnames(aok_clean_aggregated2))
+  filter(name%in% colnames(aok_clean_aggregated_settlement))
 
-settlement_level_kobold<-kobold::kobold(survey = ks2,choices = kc,data = aok_clean_aggregated2)
+
+xls_lt<-make_xlsform_lookup_table(kobo_survey = ks,kobo_choices = kc,label_column = "label")
+sm2<-xls_lt %>% filter(str_detect(question_type, "^select_multiple| ^select multiple")) %>% pull(xml_format)
+
+aok_clean_aggregated_settlement2<-aok_clean_aggregated_settlement %>% mutate_at(sm2, function(x)ifelse(x=="yes",TRUE,FALSE))
+
+# order_we_want<-colnames(aok_clean_aggregated_settlement)
+settlement_level_kobold<-kobold::kobold(survey = ks2,choices = kc,data = aok_clean_aggregated_settlement2)
 settlement_level_kobold_SL<-kobold:::relevant_updater(settlement_level_kobold)
-
 aok_aggregated_3<-settlement_level_kobold_SL$data
-colnames(aok_aggregated_3)<- colname_table$with_groups
+
+aok_aggregated_4<-aok_aggregated_3 %>% mutate_at(sm2, convert_logical_to_yn)
+
+# settlement_level_kobold_SL$data$market_now_barriers.bad_roads
+# agg_relev_cols<-colnames(settlement_level_kobold_SL$data) [!colnames(settlement_level_kobold_SL$data) %in% ks_no_relev_name]
+# aok_clean_agg2a<-settlement_level_kobold_SL$data %>% select(agg_relev_cols)
+# aok_clean_agg2b<-aok_clean_aggregated_settlement %>% select(ks_no_relev_name)
+
+
+
+# aok_aggregated_3<-cbind(aok_clean_agg2a,aok_clean_agg2b)
+# aok_aggregated_3<- aok_aggregated_3 %>% select(order_we_want)
+
+
+
+# colnames(aok_aggregated_3)<- colname_table$with_groups
 
 #JOIN PAYAM DATA
-aok_aggregated_3<- aok_aggregated_3 %>%
+aok_aggregated_5<- aok_aggregated_4 %>%
   mutate(
-    name_county_low=paste0(D.info_settlement,D.info_county) %>% butteR::tolower_rm_special())
+    name_county_low=paste0(info_settlement,info_county) %>% butteR::tolower_rm_special())
+master_new<- master_new %>%
+  mutate(
+    name_county_low=paste0(NAMECOUNTY) %>% butteR::tolower_rm_special())
 
-aok_aggregated_3 %>% nrow()
-aok_aggregated_4<-aok_aggregated_3 %>% left_join(master_new %>% select(X,Y,name_county_low), by="name_county_low")
-aok_aggregated_4 %>% nrow()
-aok_aggregated_5<- aok_aggregated_4 %>% distinct() # one got duplicated - remove it (its ok its one that should be edited in itemset in future to just be one)
-aok_aggregated_5 %>% nrow()
-aok_aggregated_with_payams<-st_as_sf(aok_aggregated_5,coords = c("X","Y"),crs=4326) %>%
+
+aok_aggregated_6<-aok_aggregated_5 %>% left_join(master_new %>% select(X,Y,name_county_low), by="name_county_low")
+
+aok_aggregated_7<- aok_aggregated_6 %>% distinct() # check for dups
+
+aok_aggregated_with_payams<-st_as_sf(aok_aggregated_7,coords = c("X","Y"),crs=4326) %>%
   st_join(payams %>% select(adm3_name))
 
 
@@ -658,18 +951,60 @@ previous_long_term<-read.csv(prev_round_LT_input_path,stringsAsFactors = FALSE,
 
 
 
-colnames(previous_long_term)<- colnames(previous_long_term) %>%
-  str_replace_all(c("L.current_activities.Crops_for_sustenance"="L.current_activities.crops_for_sustenance",
-                    "L.current_activities.Livestock"= "L.current_activities.livestock"))
-aok_aggregated_with_payams$month<- aok_aggregated_with_payams$month %>% as.character()
-aok_aggregated_with_payams_df<-aok_aggregated_with_payams %>% st_drop_geometry() %>% select(-X)
-long_term_aggregated_new<-bind_rows(previous_long_term, aok_aggregated_with_payams_df)
 
+
+aok_aggregated_with_payams$month<- aok_aggregated_with_payams$month %>% as.character()
+aok_aggregated_with_payams_df<-aok_aggregated_with_payams %>% st_drop_geometry() #%>% select(-X)
+match(colnames(aok_aggregated_with_payams_df), colname_table$no_groups)
+
+
+
+colname_table_filt_final<-colname_table %>% filter(no_groups %in% colnames(aok_aggregated_with_payams_df))
+
+aok_agg_final_w_groups<-aok_aggregated_with_payams_df %>%
+  rename_at(.vars = colname_table_filt_final$no_groups,function(x){x<-colname_table_filt_final$with_groups}) %>%
+  rename(D.ki_coverage="ki_coverage")
+
+
+colnames(aok_agg_final_w_groups) <-colnames(aok_agg_final_w_groups) %>% tolower() %>% trimws()
+colnames(previous_long_term) <-colnames(previous_long_term) %>% tolower() %>% trimws()
+cbind(colnames(aok_agg_final_w_groups) %>% sort(), colnames(previous_long_term) %>% sort())
+
+aok_agg_final_w_groups<-purrr::map_df(aok_agg_final_w_groups, ~ifelse(is.na(.),'SL',.))
+
+long_term_aggregated_new<-bind_rows(previous_long_term, aok_agg_final_w_groups)
+
+long_term_aggregated_new<-long_term_aggregated_new %>% select(-x,-x.1)
+colnames(long_term_aggregated_new)[long_term_aggregated_new %>% colnames() %>% duplicated()]
+
+capitalize_group<-function(x){
+  ifelse(substr(x,2,2)==".",stringr::str_to_sentence(x),x)
+}
+
+# long_term_aggregated_new2<-long_term_aggregated_new
+# class(colnames_with_group)
+# dups<-colnames_with_group [duplicated(colnames_with_group)] %>% sort()
+# which(colnames_with_group=="U.market_now_time" )
+
+colnames_with_group<- colnames(long_term_aggregated_new) %>% capitalize_group()
+
+colnames(long_term_aggregated_new)<- colnames(long_term_aggregated_new) %>% capitalize_group()
+
+# colnames(long_term_aggregated_new2)<- colnames(long_term_aggregated_new2) %>% str_to_title()
+# colnames(long_term_aggregated_new)<- colnames(long_term_aggregated_new) %>% ()
+# long_term_aggregated_new2 %>% colnames() %>% duplicated()
+dim(long_term_aggregated_new2)
+dim(long_term_aggregated_new)
+
+long_term_aggregated_new %>% select(D.info_state)
+# long_term_aggregated_new$month %>% table()
+aok_raw$U.market_now_barriers.bad_roads
 
 if(output_aggregated_datasets=="yes"){
-write.csv(aok_aggregated_with_payams_df,settlement_aggregated_monthly_data_output_file, na="SL")
+write.csv(aok_agg_final_w_groups,settlement_aggregated_monthly_data_output_file, na="SL")
 write.csv( long_term_aggregated_new,settlement_aggregated_LT_data_output_file)
 }
+
 
 
 
@@ -677,14 +1012,30 @@ write.csv( long_term_aggregated_new,settlement_aggregated_LT_data_output_file)
 
 mast_settlement<-read.csv(new_master_settlement_output_path, stringsAsFactors = FALSE, na.strings=c(""," ")) %>%
   mutate(name_county_low=NAMECOUNTY %>% tolower_rm_special())
+mast_settlement$name_county_low
 
+colnames(aok_agg_final_w_groups) <- colnames(aok_agg_final_w_groups) %>% capitalize_group()
+aok_agg_final_w_groups %>% nrow()
 #good quick check to make sure we have all settlementsin master list
-aok_aggregated_with_payams %>%
+aok_agg_final_w_groups$D.info_settlement
+aok_agg_final_w_groups$D.info_county
+
+
+aok_agg_final_w_groups %>%
+  mutate(name_county_low= paste0(D.info_settlement,D.info_county) %>% tolower_rm_special()) %>%
   filter(!name_county_low %in% mast_settlement$name_county_low) %>%
   select(D.info_state,D.info_county, D.info_settlement)
 
 aok_monthly<-read.csv(settlement_aggregated_monthly_data_output_file, stringsAsFactors = F, na.strings=c(""," ")) %>% select(-X) %>%
   mutate(name_county_low= paste0(D.info_settlement, D.info_county) %>%tolower_rm_special())
+
+
+#just take long term from top and filter to quickly make grids- need to rewrite
+long_term_aggregated_new %>% select(D.info_county)
+aok_monthly<- long_term_aggregated_new %>%
+  filter(month=="2020-04-01")
+long_term_aggregated_new$month %>% table()
+
 aok_with_coordinates <-aok_monthly %>% left_join(mast_settlement %>% select(X,Y,name_county_low), by="name_county_low")
 
 
@@ -715,6 +1066,7 @@ data_hex_pt$G.food_wild_proportion %>% table(useNA = "ifany")
 kc %>% filter(list_name=="AoO_IDP") %>% select(name)
 ks %>% filter(name=="idp_location") %>% select(type)
 
+
 data_hex_pt_w_composite<-data_hex_pt %>%
   mutate(
     idp_sites= ifelse(J.j2.idp_location=="informal_sites",1,0),
@@ -730,7 +1082,7 @@ data_hex_pt_w_composite<-data_hex_pt %>%
     fsl_composite = (food_inadequate +less_one_meal+hunger_severe_worse+wildfood_sick_alltime+skipping_days)/5
   )
 
-
+data_hex_pt$J.j2.Idp_location %>% table()
 #extract new columns added (should be only composite). You can add new composites above and this will still work
 vars_to_avg<-names(data_hex_pt_w_composite)[!names(data_hex_pt_w_composite)%in%names(data_hex_pt)]
 analyzed_by_grid<-data_hex_pt_w_composite %>%
@@ -747,6 +1099,12 @@ analyzed_by_grid_filt<-analyzed_by_grid %>%
   mutate_at(.vars = vars_to_avg,
             .funs = function(x){ifelse(analyzed_by_grid$State_id %in% valid_grids,x,NA)}) %>%
   st_drop_geometry()
+analyzed_by_grid_filt_shp<-analyzed_by_grid %>%
+  ungroup() %>%
+  mutate_at(.vars = vars_to_avg,
+            .funs = function(x){ifelse(analyzed_by_grid$State_id %in% valid_grids,x,NA)})
+
+
 analyzed_by_grid_filt %>% View()
 
 if(output_aggregated_datasets=="yes"){
