@@ -63,11 +63,30 @@ fuzzy_match_eval_table_output_path<-paste0("outputs/" ,
                                          month_label,"_Data.csv")
 
 
-fuzzy_match_CL_output_path<-paste0("outputs/" ,
+auto_gen_CL_output_path<-paste0("outputs/" ,
                                    monthly_folder,
                                    "/cleaning_logs/",
                                    monthly_folder,
                                    "_AUTOGEN_cleaning_log_new_settlements_",
+                                   month_label,"_Data.csv")
+auto_gen_CL_exact_match_output_path<-paste0("outputs/" ,
+                                   monthly_folder,
+                                   "/cleaning_logs/",
+                                   monthly_folder,
+                                   "_AUTOGEN_cleaning_log_new_settlements_exact_matches_",
+                                   month_label,"_Data.csv")
+auto_gen_CL_new_sett_remove_output_path<-paste0("outputs/" ,
+                                   monthly_folder,
+                                   "/cleaning_logs/",
+                                   monthly_folder,
+                                   "_AUTOGEN_cleaning_log_new_settlements_no_coords_",
+                                   month_label,"_Data.csv")
+
+full_actionable_cleaning_log_path<-paste0("outputs/" ,
+                                   monthly_folder,
+                                   "/cleaning_logs/",
+                                   monthly_folder,
+                                   "_cleaning_log_full_actionable_",
                                    month_label,"_Data.csv")
 
 
@@ -102,6 +121,10 @@ new_master_settlement_output_path<-paste0("outputs/",
 settlement_aggregated_monthly_data_output_file<- paste0("outputs/",
                                   monthly_folder,"/aggregated_data/",iso_date,
                                   "_reach_ssd_settlement_aggregated_AoK_",
+                                  month_label,"2020_Data.csv")
+ki_level_clean_data<- paste0("outputs/",
+                                  monthly_folder,"/clean_ki_data/",iso_date,
+                                  "_reach_ssd_ki_level_aok_",
                                   month_label,"2020_Data.csv")
 hex_aggregated_monthly_data_output_file<- paste0("outputs/",
                                   monthly_folder,"/aggregated_data/",iso_date,
